@@ -53,7 +53,7 @@ Returns: List of available avatars with their IDs and details.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -109,7 +109,7 @@ Returns: List of available colors with their IDs and hex values.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }

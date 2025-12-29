@@ -9,6 +9,11 @@ import {
 
 const BASE_URL = "https://app.ourskylight.com";
 
+/**
+ * Skylight subscription status types
+ */
+export type SubscriptionStatus = "plus" | "free" | "trial" | null;
+
 export interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   params?: Record<string, string | boolean | number | undefined>;
@@ -23,7 +28,7 @@ export class SkylightClient {
   private config: Config;
   private resolvedToken: string | null = null;
   private loginPromise: Promise<string> | null = null;
-  private subscriptionStatus: string | null = null;
+  private subscriptionStatus: SubscriptionStatus = null;
 
   constructor(config?: Config) {
     this.config = config ?? getConfig();
@@ -70,7 +75,7 @@ export class SkylightClient {
 
     console.error("Logging in to Skylight...");
     const result = await login(email, password);
-    this.subscriptionStatus = result.subscriptionStatus;
+    this.subscriptionStatus = result.subscriptionStatus as SubscriptionStatus;
     console.error(`Logged in as ${result.email} (${result.subscriptionStatus})`);
     return result.token;
   }
@@ -221,7 +226,7 @@ export class SkylightClient {
   /**
    * Get the subscription status
    */
-  getSubscriptionStatus(): string | null {
+  getSubscriptionStatus(): SubscriptionStatus {
     return this.subscriptionStatus;
   }
 

@@ -47,7 +47,7 @@ Returns: List of meal categories with IDs.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -90,7 +90,7 @@ Returns: List of recipes with their details.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -125,7 +125,7 @@ Returns: Recipe details including description.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -165,7 +165,7 @@ Returns: The created recipe.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -205,7 +205,7 @@ Returns: The updated recipe.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -232,7 +232,7 @@ Note: This permanently removes the recipe.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -268,7 +268,7 @@ Returns: Confirmation that ingredients were added.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -331,7 +331,7 @@ Returns: List of scheduled meals.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -379,7 +379,7 @@ Returns: The created meal sitting.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }

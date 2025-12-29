@@ -15,6 +15,45 @@ import {
 } from "../api/endpoints/lists.js";
 import { formatErrorForMcp } from "../utils/errors.js";
 
+/**
+ * Result of resolving a list ID from listId or listName
+ */
+type ListResolutionResult =
+  | { success: true; id: string; name: string }
+  | { success: false; error: string };
+
+/**
+ * Resolve a list ID from either listId or listName
+ * Returns error if neither provided (unless defaultToGrocery is true)
+ */
+async function resolveListId(
+  listId?: string,
+  listName?: string,
+  defaultToGrocery = false
+): Promise<ListResolutionResult> {
+  if (listId) {
+    return { success: true, id: listId, name: listName ?? listId };
+  }
+
+  if (listName) {
+    const list = await findListByName(listName);
+    if (!list) {
+      return { success: false, error: `Could not find list "${listName}"` };
+    }
+    return { success: true, id: list.id, name: list.attributes.label };
+  }
+
+  if (defaultToGrocery) {
+    const list = await findListByType("shopping", true);
+    if (!list) {
+      return { success: false, error: "No default grocery list found. Use get_lists to see available lists." };
+    }
+    return { success: true, id: list.id, name: list.attributes.label };
+  }
+
+  return { success: false, error: "Either listId or listName is required" };
+}
+
 export function registerListTools(server: McpServer): void {
   // get_lists tool
   server.tool(
@@ -70,7 +109,7 @@ Returns list names, types (shopping/to_do), and item counts.`,
           content: [
             {
               type: "text" as const,
-              text: formatErrorForMcp(error as Error),
+              text: formatErrorForMcp(error),
             },
           ],
           isError: true,
@@ -220,7 +259,7 @@ Returns items organized by section with their completion status.`,
           content: [
             {
               type: "text" as const,
-              text: formatErrorForMcp(error as Error),
+              text: formatErrorForMcp(error),
             },
           ],
           isError: true,
@@ -262,7 +301,7 @@ Returns: The created list details.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -295,20 +334,10 @@ Returns: The updated list details.`,
     },
     async ({ listId, listName, label, kind, color }) => {
       try {
-        let targetListId = listId;
-        if (!targetListId && listName) {
-          const list = await findListByName(listName);
-          if (!list) {
-            return {
-              content: [{ type: "text" as const, text: `Could not find list "${listName}"` }],
-              isError: true,
-            };
-          }
-          targetListId = list.id;
-        }
-        if (!targetListId) {
+        const resolved = await resolveListId(listId, listName);
+        if (!resolved.success) {
           return {
-            content: [{ type: "text" as const, text: "Either listId or listName is required" }],
+            content: [{ type: "text" as const, text: resolved.error }],
             isError: true,
           };
         }
@@ -318,7 +347,7 @@ Returns: The updated list details.`,
         if (kind !== undefined) updates.kind = kind;
         if (color !== undefined) updates.color = color;
 
-        const updated = await updateList(targetListId, updates);
+        const updated = await updateList(resolved.id, updates);
         return {
           content: [
             {
@@ -329,7 +358,7 @@ Returns: The updated list details.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -356,38 +385,26 @@ Note: This permanently deletes the list and all its items.`,
     },
     async ({ listId, listName }) => {
       try {
-        let targetListId = listId;
-        let targetListName = listName;
-        if (!targetListId && listName) {
-          const list = await findListByName(listName);
-          if (!list) {
-            return {
-              content: [{ type: "text" as const, text: `Could not find list "${listName}"` }],
-              isError: true,
-            };
-          }
-          targetListId = list.id;
-          targetListName = list.attributes.label;
-        }
-        if (!targetListId) {
+        const resolved = await resolveListId(listId, listName);
+        if (!resolved.success) {
           return {
-            content: [{ type: "text" as const, text: "Either listId or listName is required" }],
+            content: [{ type: "text" as const, text: resolved.error }],
             isError: true,
           };
         }
 
-        await deleteList(targetListId);
+        await deleteList(resolved.id);
         return {
           content: [
             {
               type: "text" as const,
-              text: `Deleted list "${targetListName ?? targetListId}"`,
+              text: `Deleted list "${resolved.name}"`,
             },
           ],
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -423,45 +440,27 @@ Related: Use get_lists to see available lists and their IDs.`,
     },
     async ({ label, listId, listName, section }) => {
       try {
-        let targetListId = listId;
-        let targetListName = listName;
-
-        if (!targetListId && listName) {
-          const list = await findListByName(listName);
-          if (!list) {
-            return {
-              content: [{ type: "text" as const, text: `Could not find list "${listName}". Use get_lists to see available lists.` }],
-              isError: true,
-            };
-          }
-          targetListId = list.id;
-          targetListName = list.attributes.label;
-        } else if (!targetListId) {
-          // Default to grocery list
-          const list = await findListByType("shopping", true);
-          if (!list) {
-            return {
-              content: [{ type: "text" as const, text: "No default grocery list found. Use get_lists to see available lists." }],
-              isError: true,
-            };
-          }
-          targetListId = list.id;
-          targetListName = list.attributes.label;
+        const resolved = await resolveListId(listId, listName, true);
+        if (!resolved.success) {
+          return {
+            content: [{ type: "text" as const, text: resolved.error }],
+            isError: true,
+          };
         }
 
-        const item = await createListItem(targetListId, label, section);
+        const item = await createListItem(resolved.id, label, section);
         const sectionText = section ? ` in section "${section}"` : "";
         return {
           content: [
             {
               type: "text" as const,
-              text: `Added "${item.attributes.label}" to ${targetListName}${sectionText}`,
+              text: `Added "${item.attributes.label}" to ${resolved.name}${sectionText}`,
             },
           ],
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -512,7 +511,7 @@ Returns: The updated item details.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -550,7 +549,7 @@ Note: This permanently removes the item. Use update_list_item with status="compl
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }

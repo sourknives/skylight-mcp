@@ -130,7 +130,7 @@ Returns chores with their assignees, due dates, and completion status.`,
           content: [
             {
               type: "text" as const,
-              text: formatErrorForMcp(error as Error),
+              text: formatErrorForMcp(error),
             },
           ],
           isError: true,
@@ -255,7 +255,7 @@ The chore will appear on the Skylight display.`,
           content: [
             {
               type: "text" as const,
-              text: formatErrorForMcp(error as Error),
+              text: formatErrorForMcp(error),
             },
           ],
           isError: true,
@@ -337,7 +337,7 @@ Returns: The updated chore details.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -373,7 +373,7 @@ Note: This permanently removes the chore. For recurring chores, this may only de
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }

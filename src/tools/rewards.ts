@@ -76,7 +76,7 @@ Use this to answer:
           content: [
             {
               type: "text" as const,
-              text: formatErrorForMcp(error as Error),
+              text: formatErrorForMcp(error),
             },
           ],
           isError: true,
@@ -140,7 +140,7 @@ Use this to answer:
           content: [
             {
               type: "text" as const,
-              text: formatErrorForMcp(error as Error),
+              text: formatErrorForMcp(error),
             },
           ],
           isError: true,
@@ -208,7 +208,7 @@ Returns: The created reward details.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -261,7 +261,7 @@ Returns: The updated reward details.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -297,7 +297,7 @@ Note: This permanently removes the reward.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -348,7 +348,7 @@ Returns: The redeemed reward details.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -384,7 +384,7 @@ Returns: The unredeemed reward details.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }

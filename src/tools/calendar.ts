@@ -96,7 +96,7 @@ Returns a list of events with their titles, times, and details.`,
           content: [
             {
               type: "text" as const,
-              text: formatErrorForMcp(error as Error),
+              text: formatErrorForMcp(error),
             },
           ],
           isError: true,
@@ -159,7 +159,7 @@ Returns a list of connected calendar sources (Google, iCloud, etc.).`,
           content: [
             {
               type: "text" as const,
-              text: formatErrorForMcp(error as Error),
+              text: formatErrorForMcp(error),
             },
           ],
           isError: true,
@@ -224,7 +224,7 @@ Related: Use get_family_members to get category IDs for assignments.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -284,7 +284,7 @@ Returns: The updated event details.`,
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
@@ -320,7 +320,7 @@ Note: This permanently removes the event. For recurring events, this may only de
         };
       } catch (error) {
         return {
-          content: [{ type: "text" as const, text: formatErrorForMcp(error as Error) }],
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
           isError: true,
         };
       }
