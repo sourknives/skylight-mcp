@@ -20,7 +20,7 @@ An MCP (Model Context Protocol) server for the Skylight Calendar API. Enables AI
 ## Installation
 
 ```bash
-git clone https://github.com/yourrepo/skylight-mcp.git
+git clone https://github.com/TheEagleByte/skylight-mcp.git
 cd skylight-mcp
 npm install
 npm run build
@@ -30,16 +30,25 @@ npm run build
 
 The Skylight API requires a token that must be captured from the mobile app. There is no username/password login endpoint.
 
-### How to get your token:
+### How to get your token and frame ID:
 
-1. Install a proxy tool (Proxyman, Charles Proxy, or mitmproxy)
-2. Configure it to intercept HTTPS traffic
-3. Open the Skylight mobile app and log in
-4. Find any API request to `app.ourskylight.com`
-5. Copy the `Authorization` header value
-6. Extract the frame ID from the URL (e.g., `/api/frames/{frameId}/chores`)
+1. **Install a proxy tool** - Use [Proxyman](https://proxyman.io/) (macOS), [Charles Proxy](https://www.charlesproxy.com/) (macOS/Windows), or [mitmproxy](https://mitmproxy.org/) (CLI)
 
-See the [skylight-api auth guide](../skylight-api/docs/auth.md) for detailed instructions.
+2. **Configure HTTPS interception**
+   - Install and trust the proxy's root certificate
+   - Enable SSL/HTTPS proxying for `app.ourskylight.com`
+
+3. **Capture the token**
+   - Open the Skylight mobile app and log in
+   - In your proxy, find any API request to `app.ourskylight.com`
+   - Copy the `Authorization` header value (e.g., `Bearer eyJ...` or `Basic abc...`)
+
+4. **Get your frame ID**
+   - Look at the URL path in any API request
+   - Extract the ID from `/api/frames/{frameId}/...`
+   - Example: `/api/frames/abc123/chores` → frame ID is `abc123`
+
+> **Note**: Tokens are secrets - never commit them to version control. They may expire and need to be recaptured periodically.
 
 ## Configuration
 
