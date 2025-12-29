@@ -1,4 +1,5 @@
-import { getConfig, type Config } from "../config.js";
+import { getConfig, usesEmailAuth, type Config } from "../config.js";
+import { login } from "./auth.js";
 import {
   AuthenticationError,
   NotFoundError,
@@ -20,17 +21,72 @@ export interface RequestOptions {
  */
 export class SkylightClient {
   private config: Config;
+  private resolvedToken: string | null = null;
+  private loginPromise: Promise<string> | null = null;
 
   constructor(config?: Config) {
     this.config = config ?? getConfig();
   }
 
   /**
-   * Build the Authorization header based on auth type
+   * Get the authentication token
+   * If using email/password auth, will login first
    */
-  private getAuthHeader(): string {
-    const { token, authType } = this.config;
-    if (authType === "basic") {
+  private async getToken(): Promise<string> {
+    // If we already have a resolved token, use it
+    if (this.resolvedToken) {
+      return this.resolvedToken;
+    }
+
+    // If using token-based auth, use the configured token
+    if (!usesEmailAuth(this.config)) {
+      return this.config.token!;
+    }
+
+    // If already logging in, wait for that to complete
+    if (this.loginPromise) {
+      return this.loginPromise;
+    }
+
+    // Login with email/password
+    this.loginPromise = this.performLogin();
+    try {
+      this.resolvedToken = await this.loginPromise;
+      return this.resolvedToken;
+    } finally {
+      this.loginPromise = null;
+    }
+  }
+
+  /**
+   * Perform login and return token
+   */
+  private async performLogin(): Promise<string> {
+    const { email, password } = this.config;
+    if (!email || !password) {
+      throw new AuthenticationError("Email and password are required for login");
+    }
+
+    console.error("Logging in to Skylight...");
+    const result = await login(email, password);
+    console.error(`Logged in as ${result.email} (${result.subscriptionStatus})`);
+    return result.token;
+  }
+
+  /**
+   * Build the Authorization header
+   */
+  private async getAuthHeader(): Promise<string> {
+    const token = await this.getToken();
+
+    // If using email/password auth, the token format is like "atu_xxx"
+    // which should be used as a Bearer token
+    if (usesEmailAuth(this.config)) {
+      return `Bearer ${token}`;
+    }
+
+    // For manual token config, respect the authType setting
+    if (this.config.authType === "basic") {
       return `Basic ${token}`;
     }
     return `Bearer ${token}`;
@@ -60,6 +116,8 @@ export class SkylightClient {
     const status = response.status;
 
     if (status === 401) {
+      // Clear cached token on auth failure
+      this.resolvedToken = null;
       throw new AuthenticationError();
     }
 
@@ -97,7 +155,7 @@ export class SkylightClient {
     const url = this.buildUrl(resolvedEndpoint, params);
 
     const headers: Record<string, string> = {
-      Authorization: this.getAuthHeader(),
+      Authorization: await this.getAuthHeader(),
       Accept: "application/json",
     };
 

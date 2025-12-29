@@ -1,16 +1,49 @@
 import { z } from "zod";
 
-const ConfigSchema = z.object({
-  token: z.string().min(1, "SKYLIGHT_TOKEN is required"),
-  frameId: z.string().min(1, "SKYLIGHT_FRAME_ID is required"),
-  authType: z.enum(["bearer", "basic"]).default("bearer"),
-  timezone: z.string().default("America/New_York"),
-});
+// Config schema supports two auth methods:
+// 1. Email/password (preferred) - will login and get token automatically
+// 2. Token-based (legacy) - for manual token capture
+const ConfigSchema = z
+  .object({
+    // Email/password auth (preferred)
+    email: z.string().email().optional(),
+    password: z.string().min(1).optional(),
+
+    // Token-based auth (legacy)
+    token: z.string().min(1).optional(),
+    authType: z.enum(["bearer", "basic"]).default("bearer"),
+
+    // Required
+    frameId: z.string().min(1, "SKYLIGHT_FRAME_ID is required"),
+
+    // Optional
+    timezone: z.string().default("America/New_York"),
+  })
+  .refine(
+    (data) => {
+      // Must have either email+password OR token
+      const hasEmailAuth = data.email && data.password;
+      const hasTokenAuth = !!data.token;
+      return hasEmailAuth || hasTokenAuth;
+    },
+    {
+      message: "Either SKYLIGHT_EMAIL and SKYLIGHT_PASSWORD, or SKYLIGHT_TOKEN must be provided",
+    }
+  );
 
 export type Config = z.infer<typeof ConfigSchema>;
 
+export interface ResolvedConfig {
+  token: string;
+  frameId: string;
+  timezone: string;
+  authType: "bearer" | "basic";
+}
+
 export function loadConfig(): Config {
   const result = ConfigSchema.safeParse({
+    email: process.env.SKYLIGHT_EMAIL,
+    password: process.env.SKYLIGHT_PASSWORD,
     token: process.env.SKYLIGHT_TOKEN,
     frameId: process.env.SKYLIGHT_FRAME_ID,
     authType: process.env.SKYLIGHT_AUTH_TYPE || "bearer",
@@ -25,18 +58,25 @@ Skylight MCP Server - Configuration Error
 Missing or invalid configuration:
 ${errors}
 
-To configure the server, set these environment variables:
-  SKYLIGHT_TOKEN    - Your Skylight API token (required)
-  SKYLIGHT_FRAME_ID - Your frame/household ID (required)
-  SKYLIGHT_AUTH_TYPE - 'bearer' or 'basic' (optional, default: bearer)
-  SKYLIGHT_TIMEZONE  - Timezone for dates (optional, default: America/New_York)
+Authentication (choose one):
+  Option 1 - Email/Password (recommended):
+    SKYLIGHT_EMAIL    - Your Skylight account email
+    SKYLIGHT_PASSWORD - Your Skylight account password
 
-To obtain your token and frame ID:
-1. Install a proxy tool (Proxyman, Charles, mitmproxy)
-2. Capture traffic from the Skylight mobile app
-3. Find the Authorization header and frame ID from API calls
+  Option 2 - Manual Token:
+    SKYLIGHT_TOKEN    - Your Skylight API token
+    SKYLIGHT_AUTH_TYPE - 'bearer' or 'basic' (default: bearer)
 
-See: https://github.com/yourrepo/skylight-api/blob/main/docs/auth.md
+Required:
+  SKYLIGHT_FRAME_ID - Your frame/household ID
+
+Optional:
+  SKYLIGHT_TIMEZONE - Timezone for dates (default: America/New_York)
+
+To find your frame ID:
+1. Log in to the Skylight app
+2. Use a proxy tool to capture API traffic
+3. Look for the frame ID in URLs like /api/frames/{frameId}/chores
 `);
     process.exit(1);
   }
@@ -51,4 +91,11 @@ export function getConfig(): Config {
     cachedConfig = loadConfig();
   }
   return cachedConfig;
+}
+
+/**
+ * Check if config uses email/password auth
+ */
+export function usesEmailAuth(config: Config): boolean {
+  return !!(config.email && config.password);
 }

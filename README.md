@@ -28,45 +28,55 @@ npm run build
 
 ## Authentication
 
-The Skylight API requires a token that must be captured from the mobile app. There is no username/password login endpoint.
+The MCP server supports two authentication methods:
 
-### How to get your token and frame ID:
+### Option 1: Email/Password (Recommended)
 
-1. **Install a proxy tool** - Use [Proxyman](https://proxyman.io/) (macOS), [Charles Proxy](https://www.charlesproxy.com/) (macOS/Windows), or [mitmproxy](https://mitmproxy.org/) (CLI)
+Use your Skylight account credentials. The server will automatically log in and manage tokens.
 
-2. **Configure HTTPS interception**
-   - Install and trust the proxy's root certificate
-   - Enable SSL/HTTPS proxying for `app.ourskylight.com`
+```env
+SKYLIGHT_EMAIL=your_email@example.com
+SKYLIGHT_PASSWORD=your_password
+SKYLIGHT_FRAME_ID=your_frame_id
+```
 
-3. **Capture the token**
-   - Open the Skylight mobile app and log in
-   - In your proxy, find any API request to `app.ourskylight.com`
-   - Copy the `Authorization` header value (e.g., `Bearer eyJ...` or `Basic abc...`)
+### Option 2: Manual Token (Legacy)
 
-4. **Get your frame ID**
-   - Look at the URL path in any API request
-   - Extract the ID from `/api/frames/{frameId}/...`
-   - Example: `/api/frames/abc123/chores` → frame ID is `abc123`
+Capture a token from the Skylight app using a proxy tool.
 
-> **Note**: Tokens are secrets - never commit them to version control. They may expire and need to be recaptured periodically.
+```env
+SKYLIGHT_TOKEN=your_token_here
+SKYLIGHT_FRAME_ID=your_frame_id
+SKYLIGHT_AUTH_TYPE=bearer
+```
+
+### Finding your Frame ID
+
+You still need to find your frame ID (the household identifier):
+
+1. Use a proxy tool ([Proxyman](https://proxyman.io/), [Charles](https://www.charlesproxy.com/), or [mitmproxy](https://mitmproxy.org/))
+2. Capture any API request from the Skylight app
+3. Look at the URL path: `/api/frames/{frameId}/...`
+4. Example: `/api/frames/abc123/chores` → frame ID is `abc123`
 
 ## Configuration
 
-Set the following environment variables:
-
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `SKYLIGHT_TOKEN` | Yes | Your API token (Bearer or Basic) |
+| `SKYLIGHT_EMAIL` | Option 1 | Your Skylight account email |
+| `SKYLIGHT_PASSWORD` | Option 1 | Your Skylight account password |
+| `SKYLIGHT_TOKEN` | Option 2 | Your API token (if not using email/password) |
+| `SKYLIGHT_AUTH_TYPE` | No | `bearer` (default) or `basic` (for manual token) |
 | `SKYLIGHT_FRAME_ID` | Yes | Your household frame ID |
-| `SKYLIGHT_AUTH_TYPE` | No | `bearer` (default) or `basic` |
 | `SKYLIGHT_TIMEZONE` | No | Default timezone (default: `America/New_York`) |
 
 ### Example .env file:
 
 ```env
-SKYLIGHT_TOKEN=your_token_here
-SKYLIGHT_FRAME_ID=your_frame_id_here
-SKYLIGHT_AUTH_TYPE=bearer
+# Email/password auth (recommended)
+SKYLIGHT_EMAIL=your_email@example.com
+SKYLIGHT_PASSWORD=your_password
+SKYLIGHT_FRAME_ID=your_frame_id
 SKYLIGHT_TIMEZONE=America/New_York
 ```
 
@@ -81,7 +91,8 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
       "command": "node",
       "args": ["/path/to/skylight-mcp/dist/index.js"],
       "env": {
-        "SKYLIGHT_TOKEN": "your_token",
+        "SKYLIGHT_EMAIL": "your_email@example.com",
+        "SKYLIGHT_PASSWORD": "your_password",
         "SKYLIGHT_FRAME_ID": "your_frame_id"
       }
     }
