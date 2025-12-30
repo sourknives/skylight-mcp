@@ -32,6 +32,8 @@ export interface AuthResult {
  * Returns the authentication token and user info
  */
 export async function login(email: string, password: string): Promise<AuthResult> {
+  console.error(`[auth] Attempting login for ${email}...`);
+
   const response = await fetch(`${BASE_URL}/api/sessions`, {
     method: "POST",
     headers: {
@@ -41,14 +43,26 @@ export async function login(email: string, password: string): Promise<AuthResult
     body: JSON.stringify({ email, password }),
   });
 
+  console.error(`[auth] Login response status: ${response.status}`);
+
   if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error("Invalid email or password");
+    let errorBody = "";
+    try {
+      errorBody = await response.text();
+      console.error(`[auth] Login error response: ${errorBody}`);
+    } catch {
+      // ignore
     }
-    throw new Error(`Login failed: HTTP ${response.status}`);
+
+    if (response.status === 401) {
+      throw new Error(`Invalid email or password. Please check your SKYLIGHT_EMAIL and SKYLIGHT_PASSWORD environment variables.`);
+    }
+    throw new Error(`Login failed: HTTP ${response.status}${errorBody ? ` - ${errorBody}` : ""}`);
   }
 
   const data = (await response.json()) as LoginResponse;
+
+  console.error(`[auth] Login successful, token prefix: ${data.data.attributes.token.substring(0, 10)}...`);
 
   return {
     userId: data.data.id,
