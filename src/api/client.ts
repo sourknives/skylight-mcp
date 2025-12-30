@@ -27,7 +27,8 @@ export interface RequestOptions {
 export class SkylightClient {
   private config: Config;
   private resolvedToken: string | null = null;
-  private loginPromise: Promise<string> | null = null;
+  private resolvedUserId: string | null = null;
+  private loginPromise: Promise<{ token: string; userId: string }> | null = null;
   private subscriptionStatus: SubscriptionStatus = null;
 
   constructor(config?: Config) {
@@ -35,39 +36,42 @@ export class SkylightClient {
   }
 
   /**
-   * Get the authentication token
+   * Get the authentication credentials
    * If using email/password auth, will login first
    */
-  private async getToken(): Promise<string> {
+  private async getCredentials(): Promise<{ token: string; userId: string | null }> {
     // If we already have a resolved token, use it
     if (this.resolvedToken) {
-      return this.resolvedToken;
+      return { token: this.resolvedToken, userId: this.resolvedUserId };
     }
 
     // If using token-based auth, use the configured token
     if (!usesEmailAuth(this.config)) {
-      return this.config.token!;
+      return { token: this.config.token!, userId: null };
     }
 
     // If already logging in, wait for that to complete
     if (this.loginPromise) {
-      return this.loginPromise;
+      const result = await this.loginPromise;
+      return { token: result.token, userId: result.userId };
     }
 
     // Login with email/password
     this.loginPromise = this.performLogin();
     try {
-      this.resolvedToken = await this.loginPromise;
-      return this.resolvedToken;
+      const result = await this.loginPromise;
+      this.resolvedToken = result.token;
+      this.resolvedUserId = result.userId;
+      return result;
     } finally {
       this.loginPromise = null;
     }
   }
 
   /**
-   * Perform login and return token
+   * Perform login and return token and userId
    */
-  private async performLogin(): Promise<string> {
+  private async performLogin(): Promise<{ token: string; userId: string }> {
     const { email, password } = this.config;
     if (!email || !password) {
       throw new AuthenticationError("Email and password are required for login");
@@ -77,19 +81,21 @@ export class SkylightClient {
     const result = await login(email, password);
     this.subscriptionStatus = result.subscriptionStatus as SubscriptionStatus;
     console.error(`Logged in as ${result.email} (${result.subscriptionStatus})`);
-    return result.token;
+    return { token: result.token, userId: result.userId };
   }
 
   /**
    * Build the Authorization header
+   * For email/password auth: Basic base64(userId:token)
+   * For manual token auth: Bearer or Basic based on config
    */
   private async getAuthHeader(): Promise<string> {
-    const token = await this.getToken();
+    const { token, userId } = await this.getCredentials();
 
-    // If using email/password auth, the token format is like "atu_xxx"
-    // which should be used as a Bearer token
-    if (usesEmailAuth(this.config)) {
-      return `Bearer ${token}`;
+    // If using email/password auth, use Basic auth with userId:token
+    if (usesEmailAuth(this.config) && userId) {
+      const credentials = Buffer.from(`${userId}:${token}`).toString("base64");
+      return `Basic ${credentials}`;
     }
 
     // For manual token config, respect the authType setting
@@ -119,12 +125,21 @@ export class SkylightClient {
   /**
    * Handle API response errors
    */
-  private async handleResponseError(response: Response): Promise<never> {
+  private async handleResponseError(response: Response, url: string): Promise<never> {
     const status = response.status;
 
     if (status === 401) {
-      // Clear cached token on auth failure
+      // Clear cached credentials on auth failure
       this.resolvedToken = null;
+      this.resolvedUserId = null;
+      console.error(`[client] 401 Unauthorized for ${url}`);
+
+      if (usesEmailAuth(this.config)) {
+        throw new AuthenticationError(
+          "API request returned 401. This may indicate your frame ID is incorrect or doesn't belong to this account. " +
+            "Please verify your SKYLIGHT_FRAME_ID environment variable."
+        );
+      }
       throw new AuthenticationError();
     }
 
@@ -154,12 +169,14 @@ export class SkylightClient {
   /**
    * Make an authenticated request to the Skylight API
    */
-  async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  async request<T>(endpoint: string, options: RequestOptions = {}, isRetry = false): Promise<T> {
     const { method = "GET", params, body } = options;
 
     // Replace {frameId} placeholder with actual frame ID
     const resolvedEndpoint = endpoint.replace("{frameId}", this.config.frameId);
     const url = this.buildUrl(resolvedEndpoint, params);
+
+    console.error(`[client] ${method} ${url}`);
 
     const headers: Record<string, string> = {
       Authorization: await this.getAuthHeader(),
@@ -176,8 +193,17 @@ export class SkylightClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
+    console.error(`[client] Response: ${response.status}`);
+
     if (!response.ok) {
-      await this.handleResponseError(response);
+      // For email/password auth, try re-login once on 401
+      if (response.status === 401 && usesEmailAuth(this.config) && !isRetry) {
+        console.error("[client] Got 401, attempting re-login...");
+        this.resolvedToken = null;
+        this.resolvedUserId = null;
+        return this.request<T>(endpoint, options, true);
+      }
+      await this.handleResponseError(response, url);
     }
 
     // Handle 304 Not Modified
@@ -234,7 +260,7 @@ export class SkylightClient {
    * Initialize the client (triggers login if using email/password auth)
    */
   async initialize(): Promise<void> {
-    await this.getToken();
+    await this.getCredentials();
   }
 }
 
