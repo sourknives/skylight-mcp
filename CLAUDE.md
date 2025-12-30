@@ -41,10 +41,12 @@ npm run generate:types # Generate TypeScript types from OpenAPI spec
 
 Two methods supported (validated via Zod refinement in `config.ts`):
 
-1. **Email/Password** (recommended): Set `SKYLIGHT_EMAIL` and `SKYLIGHT_PASSWORD`. Server auto-logs in via POST /api/sessions.
+1. **Email/Password** (recommended): Set `SKYLIGHT_EMAIL` and `SKYLIGHT_PASSWORD`. Server auto-logs in via POST /api/sessions and uses `Basic base64(userId:token)` format for subsequent requests.
 2. **Manual Token**: Set `SKYLIGHT_TOKEN` and optionally `SKYLIGHT_AUTH_TYPE` (bearer/basic).
 
 Both require `SKYLIGHT_FRAME_ID` (household identifier from API URLs like `/api/frames/{frameId}/chores`).
+
+**Note**: The Skylight API uses Basic auth with the format `Basic base64(userId:token)`, not Bearer tokens.
 
 ## Plus Subscription
 
@@ -81,3 +83,24 @@ Some features require a Skylight Plus subscription. The server detects subscript
 - **API Format**: JSON:API patterns (type, id, attributes, relationships)
 - **Timezone**: Defaults to America/New_York, configurable via `SKYLIGHT_TIMEZONE`
 - **Type Generation**: Uses `openapi-typescript` to generate types from `skylight-api` OpenAPI spec
+
+## Versioning & Releases
+
+**Release Process**:
+1. Update version in `package.json`
+2. Update `CHANGELOG.md` with changes
+3. Commit changes and merge to main
+4. Create and push a tag with `v` prefix: `git tag v1.2.3 && git push origin v1.2.3`
+
+**Important**: Tags must start with `v` (e.g., `v1.1.7`) to trigger the release workflow. Tags without the `v` prefix (e.g., `1.1.7`) will not trigger a release.
+
+The release workflow (`.github/workflows/release.yml`) will:
+- Run linting, type checking, and tests
+- Build the package
+- Publish to npm with provenance
+- Create a GitHub release with auto-generated changelog
+
+## API Quirks
+
+- **Calendar date_max is exclusive**: When querying calendar events, `date_max` is treated as exclusive. The code adds 1 day to include events on the end date.
+- **Auth format**: API expects `Basic base64(userId:token)`, not Bearer tokens.
