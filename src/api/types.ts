@@ -205,6 +205,15 @@ export interface CreateTaskBoxItemRequest {
   };
 }
 
+export interface UpdateTaskBoxItemRequest {
+  data: {
+    type: "task_box_item";
+    attributes: Partial<TaskBoxItemAttributes>;
+  };
+}
+
+export type TaskBoxItemsResponse = JsonApiResponse<TaskBoxItemResource[]>;
+
 // List request types
 export interface CreateListRequest {
   data: {

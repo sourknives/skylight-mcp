@@ -11,6 +11,8 @@ import {
   addRecipeToGroceryList,
   getMealSittings,
   createMealSitting,
+  updateMealSitting,
+  deleteMealSitting,
 } from "../api/endpoints/meals.js";
 import { parseDate, formatDateForDisplay, getTodayDate, getDateOffset } from "../utils/dates.js";
 import { formatErrorForMcp } from "../utils/errors.js";
@@ -187,12 +189,14 @@ Returns: The updated recipe.`,
       recipeId: z.string().describe("ID of the recipe to update"),
       summary: z.string().optional().describe("New recipe name"),
       description: z.string().nullable().optional().describe("New description"),
+      mealCategoryId: z.string().nullable().optional().describe("New meal category ID (or null to clear)"),
     },
-    async ({ recipeId, summary, description }) => {
+    async ({ recipeId, summary, description, mealCategoryId }) => {
       try {
         const updates: Parameters<typeof updateRecipe>[1] = {};
         if (summary !== undefined) updates.summary = summary;
         if (description !== undefined) updates.description = description;
+        if (mealCategoryId !== undefined) updates.mealCategoryId = mealCategoryId;
 
         const recipe = await updateRecipe(recipeId, updates);
         return {
@@ -374,6 +378,93 @@ Returns: The created meal sitting.`,
             {
               type: "text" as const,
               text: `Scheduled meal for ${formatDateForDisplay(mealDate)} (ID: ${sitting.id})`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // update_meal_sitting tool
+  server.tool(
+    "update_meal_sitting",
+    `Update an existing scheduled meal - Plus subscription required.
+
+Use this when:
+- Changing a meal to a different date
+- Changing the meal category (e.g., from Lunch to Dinner)
+- Assigning a different recipe to a meal slot
+
+Parameters:
+- sittingId (required): ID of the meal sitting to update (from get_meal_sittings)
+- date: New date for the meal (YYYY-MM-DD or 'today', 'tomorrow')
+- mealCategoryId: New meal category ID
+- recipeId: New recipe ID (or null to clear)
+
+Returns: The updated meal sitting.`,
+    {
+      sittingId: z.string().describe("ID of the meal sitting to update"),
+      date: z.string().optional().describe("New date (YYYY-MM-DD or 'today', 'tomorrow')"),
+      mealCategoryId: z.string().optional().describe("New meal category ID"),
+      recipeId: z.string().nullable().optional().describe("New recipe ID (or null to clear)"),
+    },
+    async ({ sittingId, date, mealCategoryId, recipeId }) => {
+      try {
+        const config = getConfig();
+        const updates: Parameters<typeof updateMealSitting>[1] = {};
+
+        if (date !== undefined) updates.date = parseDate(date, config.timezone);
+        if (mealCategoryId !== undefined) updates.mealCategoryId = mealCategoryId;
+        if (recipeId !== undefined) updates.recipeId = recipeId;
+
+        const sitting = await updateMealSitting(sittingId, updates);
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Updated meal sitting (ID: ${sitting.id})`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // delete_meal_sitting tool
+  server.tool(
+    "delete_meal_sitting",
+    `Delete a scheduled meal - Plus subscription required.
+
+Use this when:
+- Removing a meal from the schedule
+- Canceling a planned meal
+
+Parameters:
+- sittingId (required): ID of the meal sitting to delete (from get_meal_sittings)
+
+Note: This permanently removes the scheduled meal.`,
+    {
+      sittingId: z.string().describe("ID of the meal sitting to delete"),
+    },
+    async ({ sittingId }) => {
+      try {
+        await deleteMealSitting(sittingId);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Deleted meal sitting (ID: ${sittingId})`,
             },
           ],
         };

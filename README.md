@@ -45,7 +45,7 @@ claude mcp add skylight npx @eaglebyte/skylight-mcp \
 #### Option 2: From source
 
 ```bash
-git clone https://github.com/TheEagleByte/skylight-mcp.git
+git clone https://github.com/sourknives/skylight-mcp.git
 cd skylight-mcp && npm install && npm run build
 ```
 

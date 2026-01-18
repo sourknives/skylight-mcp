@@ -221,3 +221,39 @@ export async function createMealSitting(
   );
   return response.data;
 }
+
+export interface UpdateMealSittingOptions {
+  date?: string;
+  mealCategoryId?: string;
+  recipeId?: string | null;
+}
+
+/**
+ * Update a meal sitting
+ */
+export async function updateMealSitting(
+  sittingId: string,
+  options: UpdateMealSittingOptions
+): Promise<MealSittingResource> {
+  const client = getClient();
+  const body: Record<string, unknown> = {};
+  if (options.date !== undefined) body.date = options.date;
+  if (options.mealCategoryId !== undefined) body.meal_category_id = options.mealCategoryId;
+  if (options.recipeId !== undefined) body.meal_recipe_id = options.recipeId;
+
+  const response = await client.request<{ data: MealSittingResource }>(
+    `/api/frames/{frameId}/meals/sittings/${sittingId}`,
+    { method: "PATCH", body }
+  );
+  return response.data;
+}
+
+/**
+ * Delete a meal sitting
+ */
+export async function deleteMealSitting(sittingId: string): Promise<void> {
+  const client = getClient();
+  await client.request(`/api/frames/{frameId}/meals/sittings/${sittingId}`, {
+    method: "DELETE",
+  });
+}

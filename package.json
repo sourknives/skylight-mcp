@@ -37,7 +37,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/TheEagleByte/skylight-mcp.git"
+    "url": "https://github.com/sourknives/skylight-mcp.git"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.11.0",

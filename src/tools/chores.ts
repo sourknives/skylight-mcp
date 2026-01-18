@@ -113,6 +113,10 @@ Returns chores with their assignees, due dates, and completion status.`,
               parts.push(`  Reward points: ${attrs.reward_points}`);
             }
 
+            if (attrs.emoji_icon) {
+              parts.push(`  Emoji: ${attrs.emoji_icon}`);
+            }
+
             return parts.join("\n");
           })
           .join("\n\n");
@@ -177,8 +181,12 @@ The chore will appear on the Skylight display.`,
         .number()
         .optional()
         .describe("Reward points for completing this chore"),
+      emoji: z
+        .string()
+        .optional()
+        .describe("Emoji icon for the chore (e.g., '🧹', '📦')"),
     },
-    async ({ summary, date, time, assignee, recurring, recurrencePattern, rewardPoints }) => {
+    async ({ summary, date, time, assignee, recurring, recurrencePattern, rewardPoints, emoji }) => {
       try {
         const config = getConfig();
         const choreDate = date ? parseDate(date, config.timezone) : getTodayDate(config.timezone);
@@ -227,6 +235,7 @@ The chore will appear on the Skylight display.`,
           recurring: recurring ?? false,
           recurrenceSet,
           rewardPoints,
+          emojiIcon: emoji,
         });
 
         const parts = [
@@ -291,8 +300,11 @@ Returns: The updated chore details.`,
       time: z.string().nullable().optional().describe("New due time (e.g., '10:00 AM', or null to clear)"),
       assignee: z.string().nullable().optional().describe("New family member assignment (or null to unassign)"),
       rewardPoints: z.number().nullable().optional().describe("New reward points (or null to clear)"),
+      emoji: z.string().nullable().optional().describe("Emoji icon (or null to clear)"),
+      recurring: z.boolean().optional().describe("Is this a recurring chore?"),
+      recurrencePattern: z.string().nullable().optional().describe("Recurrence pattern: 'daily', 'weekly', 'weekdays', RRULE string, or null to clear"),
     },
-    async ({ choreId, summary, status, date, time, assignee, rewardPoints }) => {
+    async ({ choreId, summary, status, date, time, assignee, rewardPoints, emoji, recurring, recurrencePattern }) => {
       try {
         const config = getConfig();
         const updates: Parameters<typeof updateChore>[1] = {};
@@ -302,6 +314,28 @@ Returns: The updated chore details.`,
         if (date !== undefined) updates.start = parseDate(date, config.timezone);
         if (time !== undefined) updates.startTime = time ? parseTime(time) : null;
         if (rewardPoints !== undefined) updates.rewardPoints = rewardPoints;
+        if (emoji !== undefined) updates.emojiIcon = emoji;
+        if (recurring !== undefined) updates.recurring = recurring;
+
+        // Handle recurrence pattern
+        if (recurrencePattern !== undefined) {
+          if (recurrencePattern === null) {
+            updates.recurrenceSet = null;
+          } else {
+            const pattern = recurrencePattern.toLowerCase();
+            if (pattern === "daily") {
+              updates.recurrenceSet = "RRULE:FREQ=DAILY";
+            } else if (pattern === "weekly") {
+              updates.recurrenceSet = "RRULE:FREQ=WEEKLY";
+            } else if (pattern === "weekdays") {
+              updates.recurrenceSet = "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR";
+            } else if (pattern.startsWith("RRULE:") || pattern.startsWith("rrule:")) {
+              updates.recurrenceSet = recurrencePattern;
+            } else {
+              updates.recurrenceSet = recurrencePattern;
+            }
+          }
+        }
 
         // Handle assignee
         if (assignee !== undefined) {
