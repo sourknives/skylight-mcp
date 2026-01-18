@@ -61,7 +61,7 @@ Some features require a Skylight Plus subscription. The server detects subscript
 | Category | Tools |
 |----------|-------|
 | Calendar | `get_calendar_events`, `get_source_calendars`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event` |
-| Chores | `get_chores`, `create_chore`, `update_chore`, `delete_chore` |
+| Chores | `get_chore_categories`, `get_chores`, `create_chore`, `update_chore`, `delete_chore` |
 | Lists | `get_lists`, `get_list_items`, `create_list`, `update_list`, `delete_list`, `create_list_item`, `update_list_item`, `delete_list_item` |
 | Tasks | `create_task` |
 | Family | `get_family_members`, `get_frame_info`, `get_devices` |

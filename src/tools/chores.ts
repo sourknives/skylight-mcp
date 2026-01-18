@@ -2,12 +2,70 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { getChores, createChore, updateChore, deleteChore } from "../api/endpoints/chores.js";
-import { findCategoryByName } from "../api/endpoints/categories.js";
+import { findCategoryByName, getChoreChartCategories, getCategories } from "../api/endpoints/categories.js";
 import { getTodayDate, getDateOffset, parseDate, parseTime, formatDateForDisplay } from "../utils/dates.js";
 import { formatErrorForMcp } from "../utils/errors.js";
 import { getConfig } from "../config.js";
 
 export function registerChoreTools(server: McpServer): void {
+  // get_chore_categories tool
+  server.tool(
+    "get_chore_categories",
+    `Get available chore categories (family members who can be assigned chores).
+
+Use this when:
+- Finding category IDs for assigning chores
+- Seeing who can be assigned to chores
+- Need exact category IDs for create_chore or update_chore
+
+Returns: List of categories with IDs, labels, and colors.`,
+    {
+      choreChartOnly: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Only return categories enabled for the chore chart"),
+    },
+    async ({ choreChartOnly }) => {
+      try {
+        const categories = choreChartOnly
+          ? await getChoreChartCategories()
+          : await getCategories();
+
+        if (categories.length === 0) {
+          return {
+            content: [{ type: "text" as const, text: "No chore categories found." }],
+          };
+        }
+
+        const list = categories
+          .map((cat) => {
+            const parts = [`- ${cat.attributes.label ?? "Unknown"} (ID: ${cat.id})`];
+            if (cat.attributes.color) {
+              parts.push(`  Color: ${cat.attributes.color}`);
+            }
+            if (cat.attributes.selected_for_chore_chart) {
+              parts.push(`  On chore chart: Yes`);
+            }
+            if (cat.attributes.linked_to_profile) {
+              parts.push(`  Linked to profile: Yes`);
+            }
+            return parts.join("\n");
+          })
+          .join("\n\n");
+
+        return {
+          content: [{ type: "text" as const, text: `Chore categories:\n\n${list}` }],
+        };
+      } catch (error) {
+        return {
+          content: [{ type: "text" as const, text: formatErrorForMcp(error) }],
+          isError: true,
+        };
+      }
+    }
+  );
+
   // get_chores tool
   server.tool(
     "get_chores",
@@ -153,6 +211,9 @@ Use this when the user wants to:
 - Assign chores to family members
 - Create recurring chores
 
+Assignment: Use 'assignee' for name lookup (e.g., 'Dad') or 'categoryId' for direct ID.
+Use get_chore_categories to see available category IDs.
+
 The chore will appear on the Skylight display.`,
     {
       summary: z.string().describe("Chore description (e.g., 'Empty the dishwasher')"),
@@ -167,7 +228,11 @@ The chore will appear on the Skylight display.`,
       assignee: z
         .string()
         .optional()
-        .describe("Family member to assign (e.g., 'Dad', 'Mom', 'Kids')"),
+        .describe("Family member name to assign (e.g., 'Dad', 'Mom'). Use categoryId for direct ID."),
+      categoryId: z
+        .string()
+        .optional()
+        .describe("Category ID to assign (from get_chore_categories). Takes precedence over assignee."),
       recurring: z
         .boolean()
         .optional()
@@ -186,14 +251,14 @@ The chore will appear on the Skylight display.`,
         .optional()
         .describe("Emoji icon for the chore (e.g., '🧹', '📦')"),
     },
-    async ({ summary, date, time, assignee, recurring, recurrencePattern, rewardPoints, emoji }) => {
+    async ({ summary, date, time, assignee, categoryId: providedCategoryId, recurring, recurrencePattern, rewardPoints, emoji }) => {
       try {
         const config = getConfig();
         const choreDate = date ? parseDate(date, config.timezone) : getTodayDate(config.timezone);
 
-        // Resolve assignee to category ID
-        let categoryId: string | undefined;
-        if (assignee) {
+        // Resolve category ID - direct ID takes precedence over name lookup
+        let categoryId: string | undefined = providedCategoryId;
+        if (!categoryId && assignee) {
           const category = await findCategoryByName(assignee);
           if (category) {
             categoryId = category.id;
@@ -202,7 +267,7 @@ The chore will appear on the Skylight display.`,
               content: [
                 {
                   type: "text" as const,
-                  text: `Could not find a family member named "${assignee}". Use get_family_members to see available family members.`,
+                  text: `Could not find a family member named "${assignee}". Use get_chore_categories to see available categories.`,
                 },
               ],
               isError: true,
@@ -289,7 +354,8 @@ Parameters:
 - status: "completed" to mark done, "pending" to mark incomplete
 - date: New due date
 - time: New due time
-- assignee: New family member assignment
+- assignee: New family member name assignment
+- categoryId: Direct category ID (from get_chore_categories), takes precedence over assignee
 
 Returns: The updated chore details.`,
     {
@@ -298,13 +364,14 @@ Returns: The updated chore details.`,
       status: z.enum(["pending", "completed"]).optional().describe("'completed' to mark done, 'pending' to mark incomplete"),
       date: z.string().optional().describe("New due date (YYYY-MM-DD or 'today', 'tomorrow')"),
       time: z.string().nullable().optional().describe("New due time (e.g., '10:00 AM', or null to clear)"),
-      assignee: z.string().nullable().optional().describe("New family member assignment (or null to unassign)"),
+      assignee: z.string().nullable().optional().describe("New family member name (or null to unassign). Use categoryId for direct ID."),
+      categoryId: z.string().nullable().optional().describe("Direct category ID (from get_chore_categories). Takes precedence over assignee."),
       rewardPoints: z.number().nullable().optional().describe("New reward points (or null to clear)"),
       emoji: z.string().nullable().optional().describe("Emoji icon (or null to clear)"),
       recurring: z.boolean().optional().describe("Is this a recurring chore?"),
       recurrencePattern: z.string().nullable().optional().describe("Recurrence pattern: 'daily', 'weekly', 'weekdays', RRULE string, or null to clear"),
     },
-    async ({ choreId, summary, status, date, time, assignee, rewardPoints, emoji, recurring, recurrencePattern }) => {
+    async ({ choreId, summary, status, date, time, assignee, categoryId: providedCategoryId, rewardPoints, emoji, recurring, recurrencePattern }) => {
       try {
         const config = getConfig();
         const updates: Parameters<typeof updateChore>[1] = {};
@@ -337,8 +404,10 @@ Returns: The updated chore details.`,
           }
         }
 
-        // Handle assignee
-        if (assignee !== undefined) {
+        // Handle category assignment - direct ID takes precedence over name lookup
+        if (providedCategoryId !== undefined) {
+          updates.categoryId = providedCategoryId;
+        } else if (assignee !== undefined) {
           if (assignee === null) {
             updates.categoryId = null;
           } else {
@@ -348,7 +417,7 @@ Returns: The updated chore details.`,
                 content: [
                   {
                     type: "text" as const,
-                    text: `Could not find family member "${assignee}". Use get_family_members to see available members.`,
+                    text: `Could not find family member "${assignee}". Use get_chore_categories to see available categories.`,
                   },
                 ],
                 isError: true,
