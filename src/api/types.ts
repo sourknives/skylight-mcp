@@ -190,13 +190,7 @@ export type RewardsResponse = JsonApiResponse<RewardResource[]>;
 export type RewardPointsResponse = JsonApiResponse<RewardPointResource[]>;
 
 // Request body types for creating resources
-export interface CreateChoreRequest {
-  data: {
-    type: "chore";
-    attributes: Partial<ChoreAttributes>;
-    relationships?: ChoreRelationships;
-  };
-}
+// Note: Chores use flat JSON format, not JSON:API (handled directly in chores.ts)
 
 export interface CreateTaskBoxItemRequest {
   data: {
@@ -293,15 +287,6 @@ export interface UpdateCalendarEventRequest {
 }
 
 export type CalendarEventResponse = JsonApiResponse<CalendarEventResource>;
-
-// Chore update request type
-export interface UpdateChoreRequest {
-  data: {
-    type: "chore";
-    attributes: Partial<ChoreAttributes>;
-    relationships?: ChoreRelationships;
-  };
-}
 
 // Reward request types
 export interface CreateRewardRequest {

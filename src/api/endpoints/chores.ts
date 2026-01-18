@@ -4,8 +4,6 @@ import type {
   ChoreResponse,
   ChoreResource,
   CategoryResource,
-  CreateChoreRequest,
-  UpdateChoreRequest,
 } from "../types.js";
 
 export interface GetChoresOptions {
@@ -60,44 +58,37 @@ export interface CreateChoreOptions {
 
 /**
  * Create a new chore
+ * Note: Uses the create_multiple endpoint with a single chore
  */
 export async function createChore(options: CreateChoreOptions): Promise<ChoreResource> {
   const client = getClient();
 
-  const request: CreateChoreRequest = {
-    data: {
-      type: "chore",
-      attributes: {
-        summary: options.summary,
-        start: options.start,
-        start_time: options.startTime ?? null,
-        status: options.status ?? "pending",
-        recurring: options.recurring ?? false,
-        recurrence_set: options.recurrenceSet ?? null,
-        reward_points: options.rewardPoints ?? null,
-        emoji_icon: options.emojiIcon ?? null,
-      },
-    },
+  // API expects flat JSON structure, not JSON:API format
+  const request: Record<string, unknown> = {
+    summary: options.summary,
+    start: options.start,
+    start_time: options.startTime ?? null,
+    status: options.status ?? "pending",
+    recurring: options.recurring ?? false,
+    recurrence_set: options.recurrenceSet ? [options.recurrenceSet] : null,
+    reward_points: options.rewardPoints ?? null,
+    emoji_icon: options.emojiIcon ?? null,
   };
 
-  // Add category relationship if provided
+  // Add category_id if provided (API uses category_id, not nested relationships)
   if (options.categoryId) {
-    request.data.relationships = {
-      category: {
-        data: {
-          type: "category",
-          id: options.categoryId,
-        },
-      },
-    };
+    request.category_id = options.categoryId;
+    request.category_ids = [options.categoryId];
   }
 
-  const response = await client.post<ChoreResponse>(
-    "/api/frames/{frameId}/chores",
+  // Use create_multiple endpoint (there's no single-create endpoint)
+  const response = await client.post<ChoresResponse>(
+    "/api/frames/{frameId}/chores/create_multiple",
     request
   );
 
-  return response.data;
+  // Return the first (and only) created chore
+  return response.data[0];
 }
 
 export interface UpdateChoreOptions {
@@ -121,31 +112,26 @@ export async function updateChore(
 ): Promise<ChoreResource> {
   const client = getClient();
 
-  const request: UpdateChoreRequest = {
-    data: {
-      type: "chore",
-      attributes: {},
-    },
-  };
+  // API expects flat JSON structure, not JSON:API format
+  const request: Record<string, unknown> = {};
 
-  // Map options to attributes
-  if (options.summary !== undefined) request.data.attributes.summary = options.summary;
-  if (options.start !== undefined) request.data.attributes.start = options.start;
-  if (options.startTime !== undefined) request.data.attributes.start_time = options.startTime;
-  if (options.status !== undefined) request.data.attributes.status = options.status;
-  if (options.recurring !== undefined) request.data.attributes.recurring = options.recurring;
-  if (options.recurrenceSet !== undefined) request.data.attributes.recurrence_set = options.recurrenceSet;
-  if (options.rewardPoints !== undefined) request.data.attributes.reward_points = options.rewardPoints;
-  if (options.emojiIcon !== undefined) request.data.attributes.emoji_icon = options.emojiIcon;
+  // Map options to flat request body
+  if (options.summary !== undefined) request.summary = options.summary;
+  if (options.start !== undefined) request.start = options.start;
+  if (options.startTime !== undefined) request.start_time = options.startTime;
+  if (options.status !== undefined) request.status = options.status;
+  if (options.recurring !== undefined) request.recurring = options.recurring;
+  if (options.recurrenceSet !== undefined) {
+    request.recurrence_set = options.recurrenceSet ? [options.recurrenceSet] : null;
+  }
+  if (options.rewardPoints !== undefined) request.reward_points = options.rewardPoints;
+  if (options.emojiIcon !== undefined) request.emoji_icon = options.emojiIcon;
 
-  // Handle category relationship
+  // Handle category_id (API uses category_id, not nested relationships)
   if (options.categoryId !== undefined) {
-    if (options.categoryId === null) {
-      request.data.relationships = { category: { data: null } };
-    } else {
-      request.data.relationships = {
-        category: { data: { type: "category", id: options.categoryId } },
-      };
+    request.category_id = options.categoryId;
+    if (options.categoryId !== null) {
+      request.category_ids = [options.categoryId];
     }
   }
 
