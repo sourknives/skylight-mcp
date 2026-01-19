@@ -4,10 +4,6 @@ import type {
   ListResponse,
   ListResource,
   ListItemResource,
-  CreateListRequest,
-  UpdateListRequest,
-  CreateListItemRequest,
-  UpdateListItemRequest,
   ListItemResponse,
 } from "../types.js";
 
@@ -69,6 +65,7 @@ export async function findListByType(
 
 /**
  * Create a new list
+ * Note: The Skylight API uses flat JSON format, not JSON:API
  */
 export async function createList(
   label: string,
@@ -76,37 +73,31 @@ export async function createList(
   color?: string
 ): Promise<ListResource> {
   const client = getClient();
-  const request: CreateListRequest = {
-    data: {
-      type: "list",
-      attributes: {
-        label,
-        kind,
-        color: color ?? null,
-      },
-    },
+  // API expects flat JSON format
+  const request: Record<string, unknown> = {
+    label,
+    kind,
   };
+  if (color !== undefined) {
+    request.color = color;
+  }
   const response = await client.post<ListResponse>("/api/frames/{frameId}/lists", request);
   return response.data;
 }
 
 /**
  * Update an existing list
+ * Note: The Skylight API uses flat JSON format, not JSON:API
  */
 export async function updateList(
   listId: string,
   updates: { label?: string; kind?: "shopping" | "to_do"; color?: string | null }
 ): Promise<ListResource> {
   const client = getClient();
-  const request: UpdateListRequest = {
-    data: {
-      type: "list",
-      attributes: updates,
-    },
-  };
+  // API expects flat JSON format
   const response = await client.request<ListResponse>(`/api/frames/{frameId}/lists/${listId}`, {
     method: "PUT",
-    body: request,
+    body: updates,
   });
   return response.data;
 }
@@ -121,6 +112,7 @@ export async function deleteList(listId: string): Promise<void> {
 
 /**
  * Create a new list item
+ * Note: The Skylight API uses flat JSON format, not JSON:API
  */
 export async function createListItem(
   listId: string,
@@ -128,15 +120,11 @@ export async function createListItem(
   section?: string
 ): Promise<ListItemResource> {
   const client = getClient();
-  const request: CreateListItemRequest = {
-    data: {
-      type: "list_item",
-      attributes: {
-        label,
-        section: section ?? null,
-      },
-    },
-  };
+  // API expects flat JSON format
+  const request: Record<string, unknown> = { label };
+  if (section !== undefined) {
+    request.section = section;
+  }
   const response = await client.post<ListItemResponse>(
     `/api/frames/{frameId}/lists/${listId}/list_items`,
     request
@@ -146,6 +134,7 @@ export async function createListItem(
 
 /**
  * Update a list item
+ * Note: The Skylight API uses flat JSON format, not JSON:API
  */
 export async function updateListItem(
   listId: string,
@@ -153,15 +142,10 @@ export async function updateListItem(
   updates: { label?: string; status?: "pending" | "completed"; section?: string | null }
 ): Promise<ListItemResource> {
   const client = getClient();
-  const request: UpdateListItemRequest = {
-    data: {
-      type: "list_item",
-      attributes: updates,
-    },
-  };
+  // API expects flat JSON format
   const response = await client.request<ListItemResponse>(
     `/api/frames/{frameId}/lists/${listId}/list_items/${itemId}`,
-    { method: "PUT", body: request }
+    { method: "PUT", body: updates }
   );
   return response.data;
 }
