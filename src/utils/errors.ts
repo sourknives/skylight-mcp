@@ -69,10 +69,58 @@ export class ParseError extends SkylightError {
 }
 
 /**
+ * OAuth refresh-token flow failed. Recovery depends on `code`:
+ * - invalid_grant: refresh token is dead. User must edit SKYLIGHT_REFRESH_TOKEN and restart.
+ * - network: transient. Claude Desktop restart retries from scratch.
+ */
+export type TokenRefreshErrorCode = "invalid_grant" | "network";
+export type TokenRefreshStage = "seed" | "cached";
+
+export interface TokenRefreshErrorInit {
+  code: TokenRefreshErrorCode;
+  stage?: TokenRefreshStage;
+  cause?: unknown;
+}
+
+export class TokenRefreshError extends SkylightError {
+  public readonly refreshErrorCode: TokenRefreshErrorCode;
+  public readonly stage?: TokenRefreshStage;
+  public override readonly cause?: unknown;
+
+  constructor(init: TokenRefreshErrorInit) {
+    const message =
+      init.code === "invalid_grant"
+        ? `OAuth refresh failed: invalid_grant${init.stage ? ` (stage: ${init.stage})` : ""}`
+        : `OAuth refresh failed: network error`;
+    super(message, "TOKEN_REFRESH_FAILED", 401, true);
+    this.name = "TokenRefreshError";
+    this.refreshErrorCode = init.code;
+    this.stage = init.stage;
+    this.cause = init.cause;
+  }
+}
+
+/**
  * Format an error for MCP tool response
  * Accepts unknown to handle any value from catch blocks safely
  */
 export function formatErrorForMcp(error: unknown): string {
+  if (error instanceof TokenRefreshError) {
+    if (error.refreshErrorCode === "invalid_grant") {
+      const cachedNote =
+        error.stage === "cached"
+          ? "\n\n(Your cached token is left in place for debugging. It will be replaced automatically once you update SKYLIGHT_REFRESH_TOKEN.)"
+          : "";
+      return `Skylight auth failed: refresh token is invalid or revoked.
+The token in SKYLIGHT_REFRESH_TOKEN cannot be used to log in.
+Re-capture a refresh token from the Skylight mobile app and
+update SKYLIGHT_REFRESH_TOKEN in claude_desktop_config.json,
+then restart Claude Desktop.${cachedNote}`;
+    }
+    return `Skylight auth failed: network error while refreshing token.
+Check your internet connection and restart Claude Desktop to retry.`;
+  }
+
   if (error instanceof AuthenticationError) {
     return `Authentication Error: ${error.message}
 

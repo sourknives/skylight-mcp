@@ -6,6 +6,7 @@ import {
   NotFoundError,
   RateLimitError,
   ParseError,
+  TokenRefreshError,
   formatErrorForMcp,
 } from "../src/utils/errors.js";
 
@@ -111,6 +112,44 @@ describe("errors", () => {
       expect(formatErrorForMcp(null)).toBe("Error: null");
       expect(formatErrorForMcp(undefined)).toBe("Error: undefined");
       expect(formatErrorForMcp({ custom: "object" })).toBe("Error: [object Object]");
+    });
+  });
+
+  describe("TokenRefreshError", () => {
+    it("creates invalid_grant error with stage", () => {
+      const error = new TokenRefreshError({ code: "invalid_grant", stage: "seed" });
+      expect(error.code).toBe("TOKEN_REFRESH_FAILED");
+      expect(error.refreshErrorCode).toBe("invalid_grant");
+      expect(error.stage).toBe("seed");
+      expect(error.name).toBe("TokenRefreshError");
+      expect(error.recoverable).toBe(true);
+    });
+
+    it("creates network error with cause", () => {
+      const cause = new Error("ECONNREFUSED");
+      const error = new TokenRefreshError({ code: "network", cause });
+      expect(error.refreshErrorCode).toBe("network");
+      expect(error.cause).toBe(cause);
+      expect(error.stage).toBeUndefined();
+    });
+
+    it("invalid_grant is formatted with recovery instructions by formatErrorForMcp", () => {
+      const error = new TokenRefreshError({ code: "invalid_grant", stage: "seed" });
+      const formatted = formatErrorForMcp(error);
+      expect(formatted).toContain("refresh token");
+      expect(formatted).toContain("SKYLIGHT_REFRESH_TOKEN");
+    });
+
+    it("invalid_grant with cached stage mentions cache file in formatted output", () => {
+      const error = new TokenRefreshError({ code: "invalid_grant", stage: "cached" });
+      const formatted = formatErrorForMcp(error);
+      expect(formatted).toContain("cached token");
+    });
+
+    it("network error is formatted with a connection hint", () => {
+      const error = new TokenRefreshError({ code: "network" });
+      const formatted = formatErrorForMcp(error);
+      expect(formatted).toContain("network error");
     });
   });
 });
