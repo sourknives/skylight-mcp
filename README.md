@@ -9,24 +9,36 @@ An MCP (Model Context Protocol) server for the Skylight Calendar API. Enables AI
 - **Lists**: View grocery and to-do lists ("What's on the grocery list?")
 - **Tasks**: Add items to the task box ("Add XYZ to my task list")
 - **Family**: View family members and devices
-- **Rewards**: Check reward points and available rewards
+- **Rewards**: Check reward points and available rewards (Plus subscription)
+- **Meals**: Manage recipes and meal plans (Plus subscription)
+- **Photos**: Browse photo albums (Plus subscription)
 
-## Quick Start
+## Installation
 
-### Installation
+This package is not published to npm. Install it by cloning and building from source.
 
-#### Option 1: npm package (Recommended)
+```bash
+git clone https://github.com/sourknives/skylight-mcp.git
+cd skylight-mcp
+npm install
+npm run build
+```
+
+This produces an executable at `dist/index.js`.
+
+### Configure your MCP client
 
 **mcp.json:**
 ```json
 {
   "mcpServers": {
     "skylight": {
-      "command": "npx",
-      "args": ["@eaglebyte/skylight-mcp"],
+      "command": "node",
+      "args": ["/absolute/path/to/skylight-mcp/dist/index.js"],
       "env": {
-        "SKYLIGHT_EMAIL": "your_email@example.com",
-        "SKYLIGHT_PASSWORD": "your_password",
+        "SKYLIGHT_CLIENT_ID": "your_oauth_client_id",
+        "SKYLIGHT_REFRESH_TOKEN": "your_refresh_token",
+        "SKYLIGHT_FINGERPRINT": "your_device_uuid",
         "SKYLIGHT_FRAME_ID": "your_frame_id"
       }
     }
@@ -36,34 +48,11 @@ An MCP (Model Context Protocol) server for the Skylight Calendar API. Enables AI
 
 **Claude Code:**
 ```bash
-claude mcp add skylight npx @eaglebyte/skylight-mcp \
-  -e SKYLIGHT_EMAIL=your_email@example.com \
-  -e SKYLIGHT_PASSWORD=your_password \
+claude mcp add skylight node /absolute/path/to/skylight-mcp/dist/index.js \
+  -e SKYLIGHT_CLIENT_ID=your_oauth_client_id \
+  -e SKYLIGHT_REFRESH_TOKEN=your_refresh_token \
+  -e SKYLIGHT_FINGERPRINT=your_device_uuid \
   -e SKYLIGHT_FRAME_ID=your_frame_id
-```
-
-#### Option 2: From source
-
-```bash
-git clone https://github.com/sourknives/skylight-mcp.git
-cd skylight-mcp && npm install && npm run build
-```
-
-Then use in mcp.json:
-```json
-{
-  "mcpServers": {
-    "skylight": {
-      "command": "node",
-      "args": ["/path/to/skylight-mcp/dist/index.js"],
-      "env": {
-        "SKYLIGHT_EMAIL": "your_email@example.com",
-        "SKYLIGHT_PASSWORD": "your_password",
-        "SKYLIGHT_FRAME_ID": "your_frame_id"
-      }
-    }
-  }
-}
 ```
 
 ### Instructions for AI
@@ -86,101 +75,84 @@ Copy this into your AI's custom instructions or system prompt:
 
 ## Authentication
 
-The MCP server supports two authentication methods:
+Skylight migrated to Doorkeeper OAuth2 in early 2026. The legacy
+`POST /api/sessions` email/password endpoint no longer works — the only
+supported grant is `refresh_token`. You bootstrap the server once by
+capturing credentials from the Skylight web app, then the server
+transparently rotates and persists the refresh token across restarts.
 
-### Option 1: Email/Password (Recommended)
+### Capturing credentials
 
-Use your Skylight account credentials. The server will automatically log in and manage tokens.
+1. Log in at https://app.ourskylight.com in your browser.
+2. Open DevTools → Console and run:
 
-```env
-SKYLIGHT_EMAIL=your_email@example.com
-SKYLIGHT_PASSWORD=your_password
-SKYLIGHT_FRAME_ID=your_frame_id
-```
+   ```js
+   (async () => {
+     const s = JSON.parse(localStorage['mmkv.default\\auth-storage']).state;
+     const js = [...document.scripts].map(x => x.src)
+       .find(x => x.includes('_expo') && x.includes('index-'));
+     const txt = await fetch(js).then(r => r.text());
+     const m = txt.match(/client_id[:=]\s*['"]([A-Za-z0-9_-]{8,})['"]/);
+     console.log({
+       SKYLIGHT_CLIENT_ID: m && m[1],
+       SKYLIGHT_REFRESH_TOKEN: s.refreshToken,
+       SKYLIGHT_FINGERPRINT: s.uniqueId,
+     });
+   })();
+   ```
 
-### Option 2: Manual Token (Legacy)
+3. Find your frame ID by clicking your calendar — the URL becomes
+   `https://ourskylight.com/calendar/{SKYLIGHT_FRAME_ID}`.
 
-Capture a token from the Skylight app using a proxy tool.
+### Token persistence
 
-```env
-SKYLIGHT_TOKEN=your_token_here
-SKYLIGHT_FRAME_ID=your_frame_id
-SKYLIGHT_AUTH_TYPE=bearer
-```
+On first use, the MCP exchanges your refresh token for an access token
+and writes the result to a local cache file. Skylight **rotates the
+refresh token on every refresh**, so the cache file is rewritten after
+each exchange. Default cache location:
 
-### Finding your Frame ID
+- Windows: `%APPDATA%\skylight-mcp\token.json`
+- macOS: `~/Library/Application Support/skylight-mcp/token.json`
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/skylight-mcp/token.json`
 
-You still need to find your frame ID (the household identifier):
+Override with `SKYLIGHT_CACHE_DIR`. The cache file is written with
+owner-only permissions (mode 0600 on POSIX).
 
-1. Use a proxy tool ([Proxyman](https://proxyman.io/), [Charles](https://www.charlesproxy.com/), or [mitmproxy](https://mitmproxy.org/))
-2. Capture any API request from the Skylight app
-3. Look at the URL path: `/api/frames/{frameId}/...`
-4. Example: `/api/frames/abc123/chores` → frame ID is `abc123`
+### Recovery
+
+If the logs show `refresh token is invalid or revoked`, re-capture
+`SKYLIGHT_REFRESH_TOKEN` from the web app, update it in your MCP host's
+config, and restart. The stale cache file is cleared automatically on
+the next run (via a seed-hash check).
+
+**Known limitation:** Running two MCP processes concurrently against the
+same account will burn the refresh token — the second process will see
+`invalid_grant` and fail. This is not supported.
 
 ## Configuration
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `SKYLIGHT_EMAIL` | Option 1 | Your Skylight account email |
-| `SKYLIGHT_PASSWORD` | Option 1 | Your Skylight account password |
-| `SKYLIGHT_TOKEN` | Option 2 | Your API token (if not using email/password) |
-| `SKYLIGHT_AUTH_TYPE` | No | `bearer` (default) or `basic` (for manual token) |
-| `SKYLIGHT_FRAME_ID` | Yes | Your household frame ID |
+| `SKYLIGHT_CLIENT_ID` | Yes | OAuth client ID from the Skylight web bundle |
+| `SKYLIGHT_REFRESH_TOKEN` | Yes | OAuth refresh token (seed) from the web app |
+| `SKYLIGHT_FINGERPRINT` | Yes | Device UUID from the web app's auth storage |
+| `SKYLIGHT_FRAME_ID` | Yes | Household/frame ID |
+| `SKYLIGHT_CACHE_DIR` | No | Override for the token cache directory |
 | `SKYLIGHT_TIMEZONE` | No | Default timezone (default: `America/New_York`) |
 
 ### Example .env file:
 
 ```env
-# Email/password auth (recommended)
-SKYLIGHT_EMAIL=your_email@example.com
-SKYLIGHT_PASSWORD=your_password
+SKYLIGHT_CLIENT_ID=your_oauth_client_id
+SKYLIGHT_REFRESH_TOKEN=your_refresh_token
+SKYLIGHT_FINGERPRINT=your_device_uuid
 SKYLIGHT_FRAME_ID=your_frame_id
 SKYLIGHT_TIMEZONE=America/New_York
 ```
 
 ## Available Tools
 
-### Calendar Tools
-
-| Tool | Description |
-|------|-------------|
-| `get_calendar_events` | Get calendar events for a date range |
-| `get_source_calendars` | List connected calendar sources (Google, iCloud, etc.) |
-
-### Chore Tools
-
-| Tool | Description |
-|------|-------------|
-| `get_chores` | Get chores with optional filters (date, assignee, status) |
-| `create_chore` | Create a new chore with optional recurrence |
-
-### List Tools
-
-| Tool | Description |
-|------|-------------|
-| `get_lists` | Get all available lists |
-| `get_list_items` | Get items from a specific list |
-
-### Task Tools
-
-| Tool | Description |
-|------|-------------|
-| `create_task` | Add a task to the task box |
-
-### Family Tools
-
-| Tool | Description |
-|------|-------------|
-| `get_family_members` | Get family member profiles |
-| `get_frame_info` | Get household/frame information |
-| `get_devices` | List Skylight devices |
-
-### Reward Tools
-
-| Tool | Description |
-|------|-------------|
-| `get_rewards` | Get available rewards |
-| `get_reward_points` | Get reward points balance |
+See `CLAUDE.md` for the full tool inventory (35+ tools across calendar, chores, lists, tasks, family, rewards, meals, and photos).
 
 ## Example Queries
 
@@ -197,62 +169,12 @@ Once configured, you can ask Claude things like:
 ## Development
 
 ```bash
-# Run in development mode (with hot reload)
-npm run dev
-
-# Build
-npm run build
-
-# Run tests
-npm test
-
-# Type check
-npm run typecheck
+npm run dev         # Run with hot reload
+npm run build       # Compile TypeScript
+npm test            # Run tests
+npm run typecheck   # Type-check without emitting
+npm run lint        # ESLint
 ```
-
-## API Documentation
-
-This MCP server is built on top of the reverse-engineered Skylight API. The API endpoints were documented using the [skylight-api](https://github.com/TheEagleByte/skylight-api) project, which converts browser network traffic (HAR files) into an OpenAPI specification.
-
-**API Resources:**
-- [Interactive API Docs (Swagger UI)](https://theeaglebyte.github.io/skylight-api/swagger.html)
-- [API Reference (ReDoc)](https://theeaglebyte.github.io/skylight-api/redoc.html)
-- [OpenAPI Specification](https://theeaglebyte.github.io/skylight-api/openapi/openapi.yaml)
-
-If you discover new API endpoints or find issues with the current documentation, please contribute to the [skylight-api](https://github.com/TheEagleByte/skylight-api) repository.
-
-## Contributing
-
-Contributions are welcome! Here's how you can help:
-
-1. **Fork the repository** and create a feature branch
-2. **Make your changes** with clear, descriptive commits
-3. **Run tests** (`npm test`) and linting (`npm run lint`) before submitting
-4. **Open a pull request** with a description of your changes
-
-### Development Setup
-
-```bash
-git clone https://github.com/TheEagleByte/skylight-mcp.git
-cd skylight-mcp
-npm install
-npm run dev  # Start with hot reload
-```
-
-### Areas for Contribution
-
-- Adding support for new Skylight API endpoints
-- Improving error handling and edge cases
-- Enhancing documentation
-- Writing additional tests
-
-## Issues & Support
-
-- **Bug reports**: [Open an issue](https://github.com/TheEagleByte/skylight-mcp/issues/new) with steps to reproduce
-- **Feature requests**: [Open an issue](https://github.com/TheEagleByte/skylight-mcp/issues/new) describing the use case
-- **Questions**: [Start a discussion](https://github.com/TheEagleByte/skylight-mcp/discussions) or open an issue
-
-Please include relevant details like your Node.js version, error messages, and configuration (with sensitive values redacted).
 
 ## License
 
