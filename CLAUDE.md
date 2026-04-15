@@ -19,7 +19,6 @@ npm test -- dates      # Run single test file (matches filename)
 npm run test:coverage  # Tests with coverage
 npm run lint           # ESLint
 npm run typecheck      # tsc --noEmit
-npm run generate:types # Generate TypeScript types from OpenAPI spec
 ```
 
 ## Architecture
@@ -83,22 +82,6 @@ Some features require a Skylight Plus subscription. The server detects subscript
 - **API Format**: JSON:API patterns (type, id, attributes, relationships)
 - **Timezone**: Defaults to America/New_York, configurable via `SKYLIGHT_TIMEZONE`
 - **Type Generation**: Uses `openapi-typescript` to generate types from `skylight-api` OpenAPI spec
-
-## Versioning & Releases
-
-**Release Process**:
-1. Update version in `package.json`
-2. Update `CHANGELOG.md` with changes
-3. Commit changes and merge to main
-4. Create and push a tag with `v` prefix: `git tag v1.2.3 && git push origin v1.2.3`
-
-**Important**: Tags must start with `v` (e.g., `v1.1.7`) to trigger the release workflow. Tags without the `v` prefix (e.g., `1.1.7`) will not trigger a release.
-
-The release workflow (`.github/workflows/release.yml`) will:
-- Run linting, type checking, and tests
-- Build the package
-- Publish to npm with provenance
-- Create a GitHub release with auto-generated changelog
 
 ## API Quirks
 
