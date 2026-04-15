@@ -5,7 +5,6 @@ import {
   ConfigurationError,
   NotFoundError,
   RateLimitError,
-  ParseError,
   TokenRefreshError,
   formatErrorForMcp,
 } from "../src/utils/errors.js";

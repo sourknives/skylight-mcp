@@ -1,5 +1,5 @@
 import { getConfig, type Config } from "../config.js";
-import { refreshAccessToken, type AuthResult } from "./auth.js";
+import { TokenManager } from "../auth/token-manager.js";
 import {
   AuthenticationError,
   NotFoundError,
@@ -9,9 +9,6 @@ import {
 
 const BASE_URL = "https://app.ourskylight.com";
 
-/** Refresh access token this many ms before it actually expires. */
-const REFRESH_LEEWAY_MS = 60_000;
-
 export type SubscriptionStatus = "plus" | "free" | "trial" | null;
 
 export interface RequestOptions {
@@ -20,52 +17,42 @@ export interface RequestOptions {
   body?: unknown;
 }
 
+interface UserResponse {
+  data?: {
+    id?: string;
+    attributes?: {
+      subscription_status?: string;
+    };
+  };
+}
+
+/**
+ * Skylight API client. All authentication (refresh-token rotation,
+ * persistence, expiry checks, dedup) is delegated to TokenManager.
+ */
 export class SkylightClient {
   private config: Config;
-  private auth: AuthResult | null = null;
-  private refreshPromise: Promise<AuthResult> | null = null;
+  private tokenManager: TokenManager;
   private subscriptionStatus: SubscriptionStatus = null;
 
   constructor(config?: Config) {
     this.config = config ?? getConfig();
+    this.tokenManager = new TokenManager({
+      clientId: this.config.clientId,
+      envRefreshToken: this.config.refreshToken,
+      fingerprint: this.config.fingerprint,
+    });
   }
 
-  /**
-   * Ensure we have a non-expired access token. Refreshes if needed.
-   * Single-flighted so concurrent requests share one refresh.
-   */
-  private async ensureAccessToken(forceRefresh = false): Promise<AuthResult> {
-    if (!forceRefresh && this.auth && this.auth.expiresAt - REFRESH_LEEWAY_MS > Date.now()) {
-      return this.auth;
-    }
-
-    if (this.refreshPromise) {
-      return this.refreshPromise;
-    }
-
-    this.refreshPromise = (async () => {
-      try {
-        const result = await refreshAccessToken({
-          clientId: this.config.clientId,
-          refreshToken: this.config.refreshToken,
-          fingerprint: this.config.fingerprint,
-        });
-        this.auth = result;
-        return result;
-      } finally {
-        this.refreshPromise = null;
-      }
-    })();
-
-    return this.refreshPromise;
+  private async getAuthHeader(): Promise<string> {
+    const token = await this.tokenManager.getAccessToken();
+    return `Bearer ${token}`;
   }
 
-  private async getAuthHeader(forceRefresh = false): Promise<string> {
-    const auth = await this.ensureAccessToken(forceRefresh);
-    return `Bearer ${auth.accessToken}`;
-  }
-
-  private buildUrl(endpoint: string, params?: Record<string, string | boolean | number | undefined>): string {
+  private buildUrl(
+    endpoint: string,
+    params?: Record<string, string | boolean | number | undefined>
+  ): string {
     const url = new URL(endpoint, BASE_URL);
     if (params) {
       for (const [key, value] of Object.entries(params)) {
@@ -81,11 +68,10 @@ export class SkylightClient {
     const status = response.status;
 
     if (status === 401) {
-      this.auth = null;
       console.error(`[client] 401 Unauthorized for ${url}`);
       throw new AuthenticationError(
         "API request returned 401 even after refreshing the access token. " +
-          "Re-bootstrap SKYLIGHT_REFRESH_TOKEN from the Skylight web app, or " +
+          "Re-bootstrap SKYLIGHT_REFRESH_TOKEN from the Skylight mobile app, or " +
           "verify SKYLIGHT_CLIENT_ID / SKYLIGHT_FINGERPRINT / SKYLIGHT_FRAME_ID."
       );
     }
@@ -108,11 +94,14 @@ export class SkylightClient {
     } catch {
       // ignore
     }
-
     throw new SkylightError(errorMessage, "HTTP_ERROR", status, status >= 500);
   }
 
-  async request<T>(endpoint: string, options: RequestOptions = {}, isRetry = false): Promise<T> {
+  async request<T>(
+    endpoint: string,
+    options: RequestOptions = {},
+    isRetry = false
+  ): Promise<T> {
     const { method = "GET", params, body } = options;
 
     const resolvedEndpoint = endpoint.replace("{frameId}", this.config.frameId);
@@ -121,7 +110,7 @@ export class SkylightClient {
     console.error(`[client] ${method} ${url}`);
 
     const headers: Record<string, string> = {
-      Authorization: await this.getAuthHeader(isRetry),
+      Authorization: await this.getAuthHeader(),
       Accept: "application/json",
     };
 
@@ -138,11 +127,11 @@ export class SkylightClient {
     console.error(`[client] Response: ${response.status}`);
 
     if (!response.ok) {
-      // Force a refresh and retry once on 401 (handles tokens revoked
-      // mid-flight or clock skew).
+      // Force a refresh and retry once on 401 (handles server-side
+      // revocation mid-session or clock skew).
       if (response.status === 401 && !isRetry) {
         console.error("[client] Got 401, forcing token refresh and retrying...");
-        this.auth = null;
+        await this.tokenManager.forceRefresh();
         return this.request<T>(endpoint, options, true);
       }
       await this.handleResponseError(response, url);
@@ -155,7 +144,10 @@ export class SkylightClient {
     return response.json() as Promise<T>;
   }
 
-  async get<T>(endpoint: string, params?: Record<string, string | boolean | number | undefined>): Promise<T> {
+  async get<T>(
+    endpoint: string,
+    params?: Record<string, string | boolean | number | undefined>
+  ): Promise<T> {
     return this.request<T>(endpoint, { method: "GET", params });
   }
 
@@ -180,15 +172,14 @@ export class SkylightClient {
   }
 
   /**
-   * Initialize the client: do an initial OAuth refresh, then probe /api/user
-   * to discover subscription status (used to gate Plus-only tool registration).
+   * Initialize the client: do an initial OAuth refresh, then probe
+   * /api/user to discover subscription status (used to gate Plus-only
+   * tool registration).
    */
   async initialize(): Promise<void> {
-    await this.ensureAccessToken();
+    await this.tokenManager.getAccessToken();
     try {
-      const userResp = await this.get<{
-        data: { id: string; attributes: { subscription_status?: string } };
-      }>("/api/user");
+      const userResp = await this.get<UserResponse>("/api/user");
       const status = userResp?.data?.attributes?.subscription_status;
       if (status === "plus" || status === "free" || status === "trial") {
         this.subscriptionStatus = status;
